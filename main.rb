@@ -2,9 +2,7 @@
 @x_max = @y_max = @z_max = 1
 @step = 0.0001
 @quantity = 100_000
-@a_param = 1.0
-@n_param = 1.0
-@k_param = 1.0
+@a_param = @n_param = @k_param = 1.0
 
 @func_1 = -> x { @a_param.to_f * (1.0 - x.to_f) * x.to_f }
 @func_2 = -> y { Math.exp(-@n_param.to_f * y.to_f) }
@@ -19,54 +17,68 @@ analytical_eval = -> {
     (func_3.call(@z_min) - func_3.call(@z_max)).abs
 }
 
-trapezium_method_integration = ->(min, max, step, func) {
+trapezium_method_integration = ->(min, max, func) {
   sum = 0
-  (min..max).step(step).each { |variable|
+  (min..max).step(@step) { |variable|
     sum += @step * 0.5 * (func.call(variable) + func.call(variable + @step))
   }
   sum
 }
 
-square_method_integration = ->(min, max, step, func) {
+square_method_integration = ->(min, max, func) {
   sum = 0
-  (min..max).step(step).each { |variable|
+  (min..max).step(@step) { |variable|
     sum += func.call(variable)
   }
-  # number_of_nodes = (max - min) / step
-  # (max - min) * sum / number_of_nodes = (max - min) * sum / (max - min) / step = sum / 1 / step = sum * step
-  #
-  # after basic arithmetic transformations the operations above turns into the operation below
-  sum * step
+  # (max - min) * sum / number_of_nodes = (max - min) * sum / (max - min) / @step = sum / 1 / @step = sum * @step
+  sum * @step
 }
 
-the_simplest_monte_carlo = ->(min, max, quantity, func) {
+the_simplest_monte_carlo = ->(min, max, func) {
   sum = 0
-  (0...quantity).each {
+  (0...@quantity).each {
     sum += func.call(rand(min.to_f...max.to_f))
   }
-  (max - min) * sum / quantity
+  (max - min) * sum / @quantity
 }
 
-geometric_monte_carlo = ->(min, max, quantity, func) {
-  min_max = find_min_and_max(min, max, quantity, func)
+@simple_dispersion = ->(min, max, func) {
+  sum = 0
+  sum_2 = 0
+  (0...@quantity).each {
+    f = func.call(rand(min.to_f...max.to_f))
+    sum += f
+    sum_2 += f ** 2
+  }
+  (sum_2 / @quantity - (sum / @quantity) ** 2) / @quantity
+}
+
+def simple_sigma
+  sigma_1 = (@x_max - @x_min) * Math.sqrt(@simple_dispersion.call(@x_min, @x_max, @func_1))
+  sigma_2 = (@y_max - @y_min) * Math.sqrt(@simple_dispersion.call(@y_min, @y_max, @func_2))
+  sigma_3 = (@z_max - @z_min) * Math.sqrt(@simple_dispersion.call(@z_min, @z_max, @func_3))
+  (sigma_1 + sigma_2 + sigma_3) / 3.0
+end
+
+geometric_monte_carlo = ->(min, max, func) {
+  min_max = find_min_and_max(min, max, func)
   f_min = min_max[0]
   f_max = min_max[1]
   n_1 = 0
-  (0...quantity).each {
+  (0...@quantity).each {
     x = min + (max - min) * rand(min.to_f..max.to_f)
     y = f_min + (f_max - f_min) * rand(min.to_f..max.to_f)
     if func.call(x) > y
       n_1 += 1
     end
   }
-  print "Answer: " + ((max - min) * ((f_max - f_min) * n_1 / quantity + f_min)).to_s + "\n"
-  (max - min) * ((f_max - f_min) * n_1 / quantity + f_min)
+  (max - min) * ((f_max - f_min) * n_1 / @quantity + f_min)
 }
 
-def find_min_and_max(min, max, quantity, func)
+def find_min_and_max(min, max, func)
   f_min = f_max = func.call(min)
-  (0...quantity).each { |val|
-    f = func.call((max - min).to_f / quantity * val)
+  (0...@quantity).each { |val|
+    f = func.call((max - min).to_f / @quantity * val)
     if f < f_min
       f_min = f
     elsif f > f_max
@@ -77,19 +89,24 @@ def find_min_and_max(min, max, quantity, func)
 end
 
 def total_square(func)
-  func.call(@x_min, @x_max, @step, @func_1) *
-    func.call(@y_min, @y_max, @step, @func_2) *
-    func.call(@z_min, @z_max, @step, @func_3)
+  func.call(@x_min, @x_max, @func_1) *
+    func.call(@y_min, @y_max, @func_2) *
+    func.call(@z_min, @z_max, @func_3)
 end
 
 def monte_carlo_total_square(func)
-  func.call(@x_min, @x_max, @quantity, @func_1) *
-    func.call(@y_min, @y_max, @quantity, @func_2) *
-    func.call(@z_min, @z_max, @quantity, @func_3)
+  func.call(@x_min, @x_max, @func_1) *
+    func.call(@y_min, @y_max, @func_2) *
+    func.call(@z_min, @z_max, @func_3)
 end
 
-puts analytical_eval.call
-puts total_square(trapezium_method_integration)
-puts total_square(square_method_integration)
-puts monte_carlo_total_square(the_simplest_monte_carlo)
-puts monte_carlo_total_square(geometric_monte_carlo)
+analytical_res = analytical_eval.call
+square_res = total_square(square_method_integration)
+simple_monte_res = monte_carlo_total_square(the_simplest_monte_carlo)
+geometric_monte_res = monte_carlo_total_square(geometric_monte_carlo)
+
+puts "Аналітичний метод: \t\t#{analytical_res}"
+puts "Метод трапецій: \t\t#{total_square(trapezium_method_integration)}"
+puts "Метод прямокутників: \t\t#{square_res}\tПомилка: #{(analytical_res - square_res).abs}\tПохибка: #{}"
+puts "Найпростіший метод Монте Карло: #{simple_monte_res}\tПомилка: #{(analytical_res - simple_monte_res).abs}\tПохибка: #{simple_sigma}"
+puts "Геометричний метод Монте Карло: #{geometric_monte_res}\tПомилка: #{(analytical_res - geometric_monte_res).abs}\tПохибка: #{}"
