@@ -75,6 +75,30 @@ geometric_monte_carlo = ->(min, max, func) {
   (max - min) * ((f_max - f_min) * n_1 / @quantity + f_min)
 }
 
+epsilon = -> (min, max, func) {
+  x_i = rand(min.to_f..max.to_f)
+  y_i = rand(min.to_f..max.to_f)
+  func.call(x_i) > y_i ? 0 : 1
+}
+
+@geom_dispersion = ->(min, max, func) {
+  sum = 0
+  (0...@quantity).each {
+    sum += epsilon.call(min, max, func)
+  }
+  sum.to_f / @quantity * (1.0 - sum.to_f / @quantity)
+}
+
+def geometric_sigma
+  min_max = find_min_and_max(@x_min, @x_max, @func_1)
+  sigma_1 = (@x_max - @x_min) * (min_max[1] - min_max[0]) * Math.sqrt(@geom_dispersion.call(@x_min, @x_max, @func_1) / @quantity)
+  min_max = find_min_and_max(@y_min, @y_max, @func_2)
+  sigma_2 = (@y_max - @y_min) * (min_max[1] - min_max[0]) * Math.sqrt(@geom_dispersion.call(@y_min, @y_max, @func_2) / @quantity)
+  min_max = find_min_and_max(@z_min, @z_max, @func_3)
+  sigma_3 = (@z_max - @z_min) * (min_max[1] - min_max[0]) * Math.sqrt(@geom_dispersion.call(@z_min, @z_max, @func_3) / @quantity)
+  (sigma_1 + sigma_2 + sigma_3) / 3.0
+end
+
 def find_min_and_max(min, max, func)
   f_min = f_max = func.call(min)
   (0...@quantity).each { |val|
@@ -109,4 +133,4 @@ puts "Аналітичний метод: \t\t#{analytical_res}"
 puts "Метод трапецій: \t\t#{total_square(trapezium_method_integration)}"
 puts "Метод прямокутників: \t\t#{square_res}\tПомилка: #{(analytical_res - square_res).abs}\tПохибка: #{}"
 puts "Найпростіший метод Монте Карло: #{simple_monte_res}\tПомилка: #{(analytical_res - simple_monte_res).abs}\tПохибка: #{simple_sigma}"
-puts "Геометричний метод Монте Карло: #{geometric_monte_res}\tПомилка: #{(analytical_res - geometric_monte_res).abs}\tПохибка: #{}"
+puts "Геометричний метод Монте Карло: #{geometric_monte_res}\tПомилка: #{(analytical_res - geometric_monte_res).abs}\tПохибка: #{geometric_sigma}"
