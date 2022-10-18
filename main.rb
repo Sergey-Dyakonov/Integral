@@ -1,3 +1,5 @@
+require 'benchmark'
+
 @x_min = @y_min = @z_min = 0
 @x_max = @y_max = @z_max = 1
 @step = 0.0001
@@ -17,21 +19,35 @@ analytical_eval = -> {
     (func_3.call(@z_min) - func_3.call(@z_max)).abs
 }
 
-trapezium_method_integration = ->(min, max, func) {
+trapezium_method_integration = ->(min, max, step, func) {
   sum = 0
-  (min..max).step(@step) { |variable|
-    sum += @step * 0.5 * (func.call(variable) + func.call(variable + @step))
+  (min..max).step(step) { |variable|
+    sum += step * 0.5 * (func.call(variable) + func.call(variable + step))
   }
   sum
 }
 
-square_method_integration = ->(min, max, func) {
+square_method_integration = ->(min, max, step, func) {
   sum = 0
-  (min..max).step(@step) { |variable|
+  (min..max).step(step) { |variable|
     sum += func.call(variable)
   }
-  # (max - min) * sum / number_of_nodes = (max - min) * sum / (max - min) / @step = sum / 1 / @step = sum * @step
-  sum * @step
+  # (max - min) * sum / number_of_nodes = (max - min) * sum / (max - min) / step = sum / 1 / step = sum * step
+  sum * step
+}
+
+runge = -> {
+  mistake = 0
+  s_h = square_method_integration.call(@x_min, @x_max, @step, @func_1)
+  s_2h = square_method_integration.call(@x_min, @x_max, 2 * @step, @func_1)
+  mistake += s_h - s_2h
+  s_h = square_method_integration.call(@y_min, @y_max, @step, @func_2)
+  s_2h = square_method_integration.call(@y_min, @y_max, 2 * @step, @func_2)
+  mistake += s_h - s_2h
+  s_h = square_method_integration.call(@z_min, @z_max, @step, @func_3)
+  s_2h = square_method_integration.call(@z_min, @z_max, 2 * @step, @func_3)
+  mistake += s_h - s_2h
+  (mistake / 3.0).abs
 }
 
 the_simplest_monte_carlo = ->(min, max, func) {
@@ -113,9 +129,9 @@ def find_min_and_max(min, max, func)
 end
 
 def total_square(func)
-  func.call(@x_min, @x_max, @func_1) *
-    func.call(@y_min, @y_max, @func_2) *
-    func.call(@z_min, @z_max, @func_3)
+  func.call(@x_min, @x_max, @step, @func_1) *
+    func.call(@y_min, @y_max, @step, @func_2) *
+    func.call(@z_min, @z_max, @step, @func_3)
 end
 
 def monte_carlo_total_square(func)
@@ -124,13 +140,35 @@ def monte_carlo_total_square(func)
     func.call(@z_min, @z_max, @func_3)
 end
 
+puts "Умови інтегрування наступні: \n
+Область інтегрування: #{@x_min} < х < #{@x_max}; #{@y_min} < y < #{@y_max}; #{@z_min} < z < #{@z_max}
+Крок для детерміністичних методів: #{@step}
+Кількість обчислень для статистичних методів: #{@quantity}
+Підінтегральні функції:\tf1(x) = a * (1-x)x
+\t\t\tf2(y) = exp(-ny)
+\t\t\tf3(z) = sin(PIkz)
+\t\t\tF(x,y,z) = f1(x) * f2(y) * f3(z)\n
+Введіть параметри"
+print "a ="
+@a_param = gets.chomp.to_f
+print "n ="
+@n_param = gets.chomp.to_f
+print "k ="
+@k_param = gets.chomp.to_f
+
 analytical_res = analytical_eval.call
 square_res = total_square(square_method_integration)
+square_bench = Benchmark.measure { total_square(square_method_integration) }
 simple_monte_res = monte_carlo_total_square(the_simplest_monte_carlo)
+sim_monte_bench = Benchmark.measure { monte_carlo_total_square(the_simplest_monte_carlo) }
 geometric_monte_res = monte_carlo_total_square(geometric_monte_carlo)
+geom_monte_bench = Benchmark.measure { monte_carlo_total_square(geometric_monte_carlo) }
 
-puts "Аналітичний метод: \t\t#{analytical_res}"
-puts "Метод трапецій: \t\t#{total_square(trapezium_method_integration)}"
-puts "Метод прямокутників: \t\t#{square_res}\tПомилка: #{(analytical_res - square_res).abs}\tПохибка: #{}"
-puts "Найпростіший метод Монте Карло: #{simple_monte_res}\tПомилка: #{(analytical_res - simple_monte_res).abs}\tПохибка: #{simple_sigma}"
-puts "Геометричний метод Монте Карло: #{geometric_monte_res}\tПомилка: #{(analytical_res - geometric_monte_res).abs}\tПохибка: #{geometric_sigma}"
+puts "Аналітичний метод: \t\t\t#{analytical_res}"
+puts "Метод трапецій: \t\t\t#{total_square(trapezium_method_integration)}"
+puts "Метод прямокутників (1): \t\t#{square_res}\tПомилка: #{(analytical_res - square_res).abs}\tПохибка: #{runge.call}"
+puts "Найпростіший метод Монте Карло (2): \t#{simple_monte_res}\tПомилка: #{(analytical_res - simple_monte_res).abs}\tПохибка: #{simple_sigma}"
+puts "Геометричний метод Монте Карло (3): \t#{geometric_monte_res}\tПомилка: #{(analytical_res - geometric_monte_res).abs}\tПохибка: #{geometric_sigma}"
+puts "Час обчислення (1): #{square_bench.real} c"
+puts "Час обчислення (2): #{sim_monte_bench.real} c"
+puts "Час обчислення (3): #{geom_monte_bench.real} c"
